@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+
+    <title>GitHub User Wall</title>
+    <style>
+        #svg-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>GitHub User Wall</h1>
+    <div id="svg-container"></div>
+    <p>@tankxu.eth</p>
+
+    <script>
+        // 获取 images 文件夹中所有的 SVG 文件
+        const svgFolder = 'images/';
+        fetch(svgFolder)
+            .then(response => response.text())
+            .then(text => {
+                // 提取所有 SVG 文件名
+                const matches = text.match(/href="([^"]+\.svg)"/g);
+                if (matches) {
+                    const filePromises = matches.map(match => {
+                        const fileName = match.replace('href="', '').replace('"', '');
+                        // 获取 SVG 文件内容
+                        return fetch(svgFolder + fileName)
+                            .then(response => response.text())
+                            .then(svgText => {
+                                // 提取 rank
+                                const rankMatch = svgText.match(/<text[^>]*data-testid="level-rank-icon"[^>]*>([^<]+)<\/text>/);
+                                const rank = rankMatch ? rankMatch[1].trim() : '';
+                                // 提取 stroke-dashoffset 的值
+                                const strokeRegex = /stroke-dashoffset:\s*(\d+\.\d+)/g;
+                                let match;
+                                let startValue, endValue;
+                                while ((match = strokeRegex.exec(svgText)) !== null) {
+                                    if (!startValue) {
+                                        startValue = parseFloat(match[1]);
+                                    } else {
+                                        endValue = parseFloat(match[1]);
+                                    }
+                                }
+                                const offsetDiff = startValue && endValue ? Math.abs(startValue - endValue) : 0;
+                                return { fileName, rank, offsetDiff };
+                            });
+                    });
+                    // 等待所有文件内容被获取和解析
+                    return Promise.all(filePromises);
+                } else {
+                    return [];
+                }
+            })
+            .then(files => {
+                console.log(files);
+                // 根据 rank 和 stroke-dashoffset 的差值对文件进行排序
+                function rankToSortValue(rank) {
+                    if (rank.endsWith('-')) {
+                        return rank.charAt(0) + '2';
+                    } else if (rank.endsWith('+')) {
+                        return rank.charAt(0) + '0';
+                    } else {
+                        return rank + '1';
+                    }
+                }
+                files.sort((a, b) => rankToSortValue(a.rank).localeCompare(rankToSortValue(b.rank)) || b.offsetDiff - a.offsetDiff);
+                // 创建 img 元素并加载 SVG 文件
+                files.forEach(file => {
+                    const img = document.createElement('img');
+                    img.src = svgFolder + file.fileName;
+                    document.getElementById('svg-container').appendChild(img);
+                });
+            })
+            .catch(error => console.error('Error:', error));
+    </script>
+</body>
+
+</html>
